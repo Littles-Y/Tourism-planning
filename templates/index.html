@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>旅游助手测试页</title>
+    <!-- 添加同步地图加载 -->
+    <script src="https://webapi.amap.com/maps?v=2.0&key=ed00597451d3480df1514173ff3a671b&callback=initMap"></script>
+    <style>
+        body { max-width: 800px; margin: 20px auto; padding: 20px; }
+        .container { display: flex; gap: 20px; }
+        .input-section { flex: 1; }
+        #response { 
+            white-space: pre-wrap;
+            border: 1px solid #ccc;
+            padding: 10px;
+            min-height: 200px;
+        }
+        #mapContainer {
+            flex: 1;
+            height: 400px;
+            border: 1px solid #ccc;
+        }
+        /* 将样式移到head的style标签内 */
+        .loading { color: #666; font-style: italic; }
+        .error { color: #dc3545; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="input-section">
+            <h2>旅游问答测试</h2>
+            <textarea id="question" rows="5" style="width: 100%" 
+                placeholder="请输入您的问题，例如：烟台有哪些适合情侣的景点？"></textarea>
+            <button onclick="submitQuestion()">提交问题</button>
+            <h3>响应结果：</h3>
+            <div id="response"></div>
+        </div>
+        
+        <div>
+            <h3>地图展示：</h3>
+            <div id="mapContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化地图标记数组
+        let markers = [];
+
+        // 初始化地图（需要替换为您的高德API key）
+        function initMap() {
+            const map = new AMap.Map('mapContainer', {
+                zoom: 12,
+                center: [121.3914, 37.5393] // 烟台中心坐标
+            });
+            window.map = map;
+        }
+
+        // 提交问题到后端
+        async function submitQuestion() {
+            const question = document.getElementById('question').value;
+            const responseDiv = document.getElementById('response');
+            
+            try {
+                responseDiv.innerHTML = '<div class="loading">思考中...</div>';
+                const response = await fetch('http://localhost:8000/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ prompt: question })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP错误! 状态码: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (!data.answer) {
+                    throw new Error('服务器返回空响应');
+                }
+                
+                responseDiv.innerHTML = formatResponse(data.answer);
+                updateMapMarkers(data.answer);  // 确保此函数已正确定义
+            } catch (error) {
+                responseDiv.innerHTML = `<div class="error">请求失败: ${error.message}</div>`;
+            }
+        }
+
+        // 格式化响应内容
+        function formatResponse(text) {
+            return text.replace(/🔍 地图跳转：(.*?)( |$)/g, '<a href="$1" target="_blank">[查看地图]</a> ');
+        }
+
+        function updateMapMarkers(answer) {
+            // 清除旧标记
+            markers.forEach(marker => marker.setMap(null));
+            markers = [];
+            
+            // 从回答中提取所有地图链接
+            const mapLinks = answer.match(/🔍 地图跳转：(https:\/\/uri\.amap\.com\/search\?.*?)( |$)/g) || [];
+            
+            mapLinks.forEach(link => {
+                const url = link.split(' ')[0].replace('🔍 地图跳转：', '');
+                const params = new URLSearchParams(url.split('?')[1]);
+                const keywords = params.get('keywords');
+                const city = params.get('city');
+                
+                // 调用高德地理编码API
+                AMap.plugin('AMap.Geocoder', () => {
+                    const geocoder = new AMap.Geocoder({
+                        city: city
+                    });
+                    
+                    geocoder.getLocation(keywords, (status, result) => {
+                        if (status === 'complete' && result.geocodes.length > 0) {
+                            const location = result.geocodes[0].location;
+                            const marker = new AMap.Marker({
+                                position: [location.lng, location.lat],
+                                map: window.map
+                            });
+                            markers.push(marker);
+                            window.map.setCenter([location.lng, location.lat]);
+                        }
+                    });
+                });
+            });
+        }
+
+        // 初始化加载地图
+        // 移除旧的window.onload初始化
+        window.onload = function() {
+            // 保留其他初始化逻辑（如果有）
+            initMap(); // 确保地图已经加载
+        };
+    </script>
+</body>
+</html>

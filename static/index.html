@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>旅游助手测试页</title>
+    <style>
+        body { max-width: 800px; margin: 20px auto; padding: 20px; }
+        .container { display: flex; gap: 20px; }
+        .input-section { flex: 1; }
+        #response { 
+            white-space: pre-wrap;
+            border: 1px solid #ccc;
+            padding: 10px;
+            min-height: 200px;
+        }
+        #mapContainer {
+            flex: 1;
+            height: 400px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="input-section">
+            <h2>旅游问答测试</h2>
+            <textarea id="question" rows="5" style="width: 100%" 
+                placeholder="请输入您的问题，例如：烟台有哪些适合情侣的景点？"></textarea>
+            <button onclick="submitQuestion()">提交问题</button>
+            <h3>响应结果：</h3>
+            <div id="response"></div>
+        </div>
+        
+        <div>
+            <h3>地图展示：</h3>
+            <div id="mapContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化地图（需要替换为您的高德API key）
+        function initMap() {
+            const map = new AMap.Map('mapContainer', {
+                zoom: 12,
+                center: [121.3914, 37.5393] // 烟台中心坐标
+            });
+            window.map = map;
+        }
+
+        // 提交问题到后端
+        async function submitQuestion() {
+            const question = document.getElementById('question').value;
+            const responseDiv = document.getElementById('response');
+            
+            try {
+                responseDiv.textContent = '请求中...';
+                const response = await fetch('http://localhost:8000/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ prompt: question })
+                });
+
+                const data = await response.json();
+                responseDiv.innerHTML = formatResponse(data.answer);
+                updateMapMarkers(data.answer);
+            } catch (error) {
+                responseDiv.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // 格式化响应内容
+        function formatResponse(text) {
+            return text.replace(/🔍 地图跳转：(.*?)( |$)/g, '<a href="$1" target="_blank">[查看地图]</a> ');
+        }
+
+        // 初始化加载地图
+        window.onload = function() {
+            // 请替换为您的高德地图API Key
+            const key = '您的高德API_KEY';
+            const script = document.createElement('script');
+            script.src = `https://webapi.amap.com/maps?v=2.0&key=${key}&callback=initMap`;
+            document.head.appendChild(script);
+        };
+    </script>
+</body>
+</html>
